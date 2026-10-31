@@ -44,6 +44,8 @@ class PhotonNet {
     c.onStateChange = st => {
       if (this.c !== c) return; // ignore the client a retry replaced
       const S = LBC.State;
+      this.lastState = (LBC.StateToName && LBC.StateToName(st)) || st;
+      console.log('[party] photon state:', this.lastState);
       if (st === S.JoinedLobby) act();
       if (st === S.Disconnected) {
         if (this.joined) this.emit('closed', 'Lost connection to the party.');
@@ -62,20 +64,22 @@ class PhotonNet {
     c.onError = (ec, msg) => {
       if (this.c !== c) return; if (!acted && retry()) return; clearTimeout(this.timer);
       if (this.joined) return;
-      this.emit('error', !acted ? 'Could not reach the multiplayer server: ' + msg
-        : asHost ? 'Could not create the party. Try again.' : 'No party found with that code. Check it and try again.');
+      const why = ` (Photon ${ec}: ${msg}, step ${this.lastState})`;
+      this.emit('error', (!acted ? 'Could not reach the multiplayer server.'
+        : asHost ? 'Could not create the party.' : 'Could not join the party.') + why);
     };
     c.onOperationResponse = (err, msg, opCode) => {
       if (!err || this.c !== c) return;
       clearTimeout(this.timer);
-      if (opCode === JOIN) this.emit('error', err === 32765 ? 'That party is full.' : 'No party found with that code. Check it and try again.');
-      else if (opCode === CREATE) this.emit('error', 'Could not create the party. Try again.');
+      const why = ` (Photon ${err}: ${msg})`;
+      if (opCode === JOIN) this.emit('error', (err === 32765 ? 'That party is full.' : err === 32758 ? 'No party found with that code. Check it and try again.' : 'Could not join the party.') + why);
+      else if (opCode === CREATE) this.emit('error', 'Could not create the party.' + why);
     };
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       if (this.joined) return;
       if (!acted && retry()) return;
-      this.emit('error', acted ? 'No party found with that code. Check it and try again.' : 'The multiplayer server is not answering. Try again in a moment.');
+      this.emit('error', (acted ? (asHost ? 'Could not create the party.' : 'No party found with that code. Check it and try again.') : 'The multiplayer server is not answering. Try again in a moment.') + ` (timed out at step ${this.lastState})`);
       this.close();
     }, 9000);
     try { c.connectToRegionMaster(PHOTON_REGION); } catch (e) { if (!retry()) this.emit('error', 'Could not reach the multiplayer server.'); }
