@@ -40,12 +40,28 @@ class PhotonNet {
       if (asHost) c.createRoom('BOO-' + code, { maxPlayers: MAX_PARTY, isVisible: false, emptyRoomLiveTime: 0 });
       else c.joinRoom('BOO-' + code);
     };
-    c.onRoomList = act;
+    // SDK 4.1 predates per-room tokens: the master answers Create/JoinGame with a fresh token
+    // (param 221) that the game server requires, but the old SDK keeps the login token and the
+    // game server rejects it with 32737 "Wrong game Id". Copy the new token before it connects.
+    const SECRET = 221;
+    const patchMaster = () => {
+      const peer = c.masterPeer;
+      if (!peer || peer.__booTokenFix || !peer.addResponseListener) return;
+      peer.__booTokenFix = true;
+      const take = r => {
+        const t = r && r.vals && r.vals[SECRET];
+        if (t) { c.connectOptions = c.connectOptions || {}; c.connectOptions.userAuthSecret = t; }
+      };
+      peer.addResponseListener(CREATE, take);
+      peer.addResponseListener(JOIN, take);
+    };
+    c.onRoomList = () => { patchMaster(); act(); };
     c.onStateChange = st => {
       if (this.c !== c) return; // ignore the client a retry replaced
       const S = LBC.State;
       this.lastState = (LBC.StateToName && LBC.StateToName(st)) || st;
       console.log('[party] photon state:', this.lastState);
+      if (st === S.ConnectedToMaster || st === S.JoinedLobby) patchMaster();
       if (st === S.JoinedLobby) act();
       if (st === S.Disconnected) {
         if (this.joined) this.emit('closed', 'Lost connection to the party.');
