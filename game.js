@@ -18,7 +18,7 @@ function spawnFood(x, y, m) {
   f.c = CANDY[f.ci]; food.push(f);
   if (mp && mp.isHost) foodAdded.push(f);
 }
-const myLook = () => ({ name: save.name || 'You', skin: save.skin, hat: save.hat, lv: Object.assign({}, save.lv) });
+const myLook = () => ({ name: save.name || 'You', skin: save.skin, hat: save.hat, lv: Object.assign({}, save.lv), lvl: levelInfo(save.xp).lvl });
 function makeGhost(isPlayer, look) {
   let x, y, tries = 0;
   const human = isPlayer || look;
@@ -33,6 +33,7 @@ function makeGhost(isPlayer, look) {
     id: ++ghostId, x, y, vx: 0, vy: 0, m, r: radius(m), alive: true, isPlayer, human: !!look,
     lv: look ? look.lv : { speed: 0, magnet: 0, size: 0, dash: 0 },
     name: look ? look.name : NAMES[(Math.random() * NAMES.length) | 0],
+    lvl: look ? (look.lvl || 1) : botLevel(),
     body: look ? SKINS[look.skin].body : `hsl(${(Math.random() * 360) | 0} 70% 88%)`,
     hat: look ? look.hat : (Math.random() < 0.4 ? 1 + ((Math.random() * (HATS.length - 1)) | 0) : 0),
     wob: Math.random() * 6.28, dashCd: 0, dashT: 0, tx: x, ty: y, think: 0,
@@ -64,7 +65,16 @@ function payout() {
   const tm = timeMult(runStats.t), rm = rankMult(runStats.bestRank);
   return { base, tm, rm, total: Math.round(base * tm * rm) };
 }
-const earnedSoFar = () => payout().total;
+const earnedSoFar = () => mp ? 0 : payout().total; // party candy is just for fun, it never reaches the wallet
+// match XP counts in solo and party; parties get +20% for playing together
+const PARTY_XP = 1.2;
+function matchXp() {
+  const peak = Math.round(runStats.peak / 2), eats = runStats.eaten * 15, time = Math.round(runStats.t / 2);
+  const r = runStats.bestRank, place = r === 1 ? 100 : r <= 3 ? 60 : r <= 5 ? 30 : 0;
+  const sub = peak + eats + time + place, mult = mp ? PARTY_XP : 1;
+  return { peak, eats, time, place, mult, total: Math.round(sub * mult) };
+}
+const badge = lvl => `${tierOf(lvl).icon}${lvl}`;
 
 // ---------- input ----------
 const keys = {};
@@ -204,7 +214,7 @@ function eat(a, b) {
   }
   if (a.remote && mp) mp.remoteAte(a, b);
   if (b.remote && mp) mp.remoteDied(b, a);
-  if (b.isPlayer) { runStats.killer = a.name; shake = 16; blip(300, 0.5, 'sawtooth', 0.06, 0.25); setTimeout(() => showResults(false), 800); }
+  if (b.isPlayer) { runStats.killer = a.name; shake = 16; blip(300, 0.5, 'sawtooth', 0.06, 0.25); setTimeout(onPlayerDeath, 800); }
 }
 function burst(x, y, c, n) { for (let i = 0; i < n; i++) { const a = rnd(0, 6.28), s = rnd(80, 320); parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: rnd(0.4, 0.9), c }); } }
 
@@ -232,7 +242,7 @@ function update(dt) {
     g.vx += (dir[0] * sp - g.vx) * k; g.vy += (dir[1] * sp - g.vy) * k;
     g.x = Math.max(g.r, Math.min(W - g.r, g.x + g.vx * dt));
     g.y = Math.max(g.r, Math.min(H - g.r, g.y + g.vy * dt));
-    g.dashT -= dt; g.dashCd -= dt; g.wob += dt * 3; g.happyT -= dt; g.emoteT -= dt;
+    g.dashT -= dt; g.dashCd -= dt; if (g.shieldT > 0) g.shieldT -= dt; g.wob += dt * 3; g.happyT -= dt; g.emoteT -= dt;
     g.moodT -= dt;
     if (g.moodT <= 0 || g.emoteT > 0) { g.mood = autoMood(g); g.moodT = 0.2; }
     if (g.m > 30) g.m -= g.m * 0.0035 * dt; // slow decay keeps giants catchable
@@ -263,7 +273,7 @@ function update(dt) {
     const a = ghosts[i]; if (!a.alive) continue;
     for (let j = 0; j < ghosts.length; j++) {
       const b = ghosts[j]; if (i === j || !b.alive) continue;
-      if (radius(a.m) > radius(b.m) * EAT_RATIO && Math.hypot(a.x - b.x, a.y - b.y) < a.r - b.r * 0.35) eat(a, b);
+      if (!(b.shieldT > 0) && radius(a.m) > radius(b.m) * EAT_RATIO && Math.hypot(a.x - b.x, a.y - b.y) < a.r - b.r * 0.35) eat(a, b);
     }
   }
   for (let i = ghosts.length - 1; i >= 0; i--) if (!ghosts[i].alive && !ghosts[i].isPlayer) ghosts.splice(i, 1);
@@ -312,7 +322,8 @@ function drawLabels(g, t) {
   ctx.font = `800 ${fs}px Futura, "Trebuchet MS", sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.lineWidth = 4; ctx.strokeStyle = '#fffaf0'; ctx.fillStyle = g.isPlayer ? '#5b2a86' : g.human ? '#1f7f8c' : INK;
-  ctx.strokeText(g.name, x, y + r * 1.3 + fs * 0.4); ctx.fillText(g.name, x, y + r * 1.3 + fs * 0.4);
+  const label = `${badge(g.lvl || 1)} ${g.name}`;
+  ctx.strokeText(label, x, y + r * 1.3 + fs * 0.4); ctx.fillText(label, x, y + r * 1.3 + fs * 0.4);
   const rel = g.isPlayer ? 'me' : relation(g), m = Math.round(g.m);
   const tag = { me: `${m}`, eat: `🍴 EAT · ${m}`, run: `☠ RUN · ${m}`, even: `≈ EVEN · ${m}`, none: `${m}` }[rel];
   const col = { me: '#ff6a1f', eat: '#3f8f2a', run: '#d42f2f', even: '#8a7a63', none: '#8a7a63' }[rel];
@@ -377,6 +388,7 @@ function render(t, dt) {
       else if (rel === 'eat') { ctx.strokeStyle = 'rgba(63,143,42,.6)'; ctx.setLineDash([12, 8]); ctx.beginPath(); ctx.arc(g.x, g.y, g.r * 1.28, 0, 6.28); ctx.stroke(); ctx.setLineDash([]); }
     }
     ctx.save(); ctx.translate(g.x, g.y); drawGhostShape(ctx, g, t); ctx.restore();
+    if (g.shieldT > 0) { ctx.globalAlpha = Math.min(1, g.shieldT) * (0.55 + 0.25 * Math.sin(t / 90)); ctx.strokeStyle = '#ffc23d'; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(g.x, g.y, g.r * 1.45, 0, 6.28); ctx.stroke(); ctx.globalAlpha = 1; }
   }
   for (const g of vis) drawLabels(g, t);
   // aim arrow replaces the hidden cursor
@@ -424,24 +436,29 @@ function hud(dt) {
   const rank = sorted.indexOf(player) + 1;
   if (player.alive && rank > 0 && rank < runStats.bestRank) {
     const before = rankMult(runStats.bestRank); runStats.bestRank = rank;
-    if (rankMult(rank) > before && state === 'play') { toast(`🏆 Reached #${rank}! Rank bonus x${rankMult(rank)}`); blip(880, 0.25, 'triangle', 0.06, 1.5); }
+    if (rankMult(rank) > before && state === 'play') { toast(mp ? `🏆 Reached #${rank}! Bonus XP unlocked` : `🏆 Reached #${rank}! Rank bonus x${rankMult(rank)}`); blip(880, 0.25, 'triangle', 0.06, 1.5); }
   }
   if (player.alive && state === 'play') {
     const tm = timeMult(runStats.t);
     if (tm > 1 && tm !== runStats.tier) {
       runStats.tier = tm; const m = Math.floor(runStats.t / 60);
-      toast(`⏱ ${m}:00 survived! Time bonus x${tm}`); blip(660, 0.2, 'triangle', 0.06, 1.5); setTimeout(() => blip(990, 0.25, 'triangle', 0.06, 1.3), 120);
+      if (!mp) toast(`⏱ ${m}:00 survived! Time bonus x${tm}`); blip(660, 0.2, 'triangle', 0.06, 1.5); setTimeout(() => blip(990, 0.25, 'triangle', 0.06, 1.3), 120);
     }
     const p = payout(), next = tm >= 3 ? null : runStats.t < TIER_LEN ? TIER_LEN : TIER_LEN * (1 + Math.floor(runStats.t / TIER_LEN));
     const prevMark = runStats.t < TIER_LEN ? 0 : TIER_LEN * Math.floor(runStats.t / TIER_LEN);
     const pct = next ? Math.min(100, (runStats.t - prevMark) / (next - prevMark) * 100) : 100;
     const left = next ? Math.ceil(next - runStats.t) : 0;
-    $('bonus').innerHTML = `<div class="brow"><b>🍬 x${(p.tm * p.rm).toFixed(2).replace(/\.?0+$/, '')}</b><span>⏱ x${p.tm} · 🏆 x${p.rm}</span></div>
+    const x = matchXp();
+    $('bonus').innerHTML = mp
+      ? `<div class="brow"><b>⭐ ${x.total} XP</b><span>party x${PARTY_XP}</span></div>
+        <div class="bnext">🍬 Party candy is just for fun and won't be added to your balance.</div>`
+      : `<div class="brow"><b>🍬 x${(p.tm * p.rm).toFixed(2).replace(/\.?0+$/, '')}</b><span>⏱ x${p.tm} · 🏆 x${p.rm}</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="bnext">${next ? `x${timeMult(next)} in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Max time bonus!'} · ${p.total} candy so far</div>`;
+      <div class="bnext">${next ? `x${timeMult(next)} in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Max time bonus!'} · ${p.total} candy · ⭐ ${x.total} XP</div>`;
   }
-  let html = sorted.slice(0, 5).map((g, i) => `<div class="row ${g.isPlayer ? 'me' : ''}"><span>${i + 1}. ${g.human && !g.isPlayer ? '👥 ' : ''}${esc(g.name)}</span><span>${Math.round(g.m)}</span></div>`).join('');
-  if (rank > 5) html += `<div class="row me"><span>${rank}. ${esc(player.name)}</span><span>${Math.round(player.m)}</span></div>`;
+  const nm = g => `${badge(g.lvl || 1)} ${g.human && !g.isPlayer ? '👥 ' : ''}${esc(g.name)}`;
+  let html = sorted.slice(0, 5).map((g, i) => `<div class="row ${g.isPlayer ? 'me' : ''}"><span>${i + 1}. ${nm(g)}</span><span>${Math.round(g.m)}</span></div>`).join('');
+  if (rank > 5) html += `<div class="row me"><span>${rank}. ${nm(player)}</span><span>${Math.round(player.m)}</span></div>`;
   $('rows').innerHTML = html;
   if (runStats.t > 10 || runStats.eaten > 0) $('hint').style.opacity = 0;
 }

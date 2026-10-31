@@ -134,6 +134,27 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
 .pwait{flex:1;align-self:center;text-align:center;font-weight:800;color:var(--plum)}
 #homeLeft .btn{width:100%}
 @media (max-width:760px){.how,.pgrid{grid-template-columns:minmax(0,1fr)}.members{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.levelcard{width:100%;border:3px solid var(--ink);border-radius:14px;background:#fff;padding:8px 10px;text-align:left;margin:6px 0 10px}
+#homeLeft .levelcard{margin:0}
+.xphead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.xphead b{font-family:var(--display);font-size:18px}
+.tierpill{font-family:var(--display);font-weight:800;font-size:13px;color:#fff;border:2px solid var(--ink);border-radius:999px;padding:2px 10px;text-shadow:1px 1px 0 rgba(0,0,0,.35)}
+.xpbar{height:12px;border:2px solid var(--ink);border-radius:99px;background:var(--cream);overflow:hidden;margin:6px 0 3px}
+.xpbar i{display:block;height:100%;background:var(--c);transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.xpnums{font-size:11px;opacity:.75}
+.xpb{margin-top:6px}.xpb span{font-size:12px}
+.mlvl{display:block;font-size:10px;font-weight:800;font-family:var(--display)}
+.tiers b{white-space:nowrap}
+.bonusbtn{width:100%;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--gold);font-size:17px;padding:12px 16px;
+  animation:bonuspulse 2.4s ease-in-out infinite}
+@keyframes bonuspulse{0%,100%{transform:none}50%{transform:scale(1.02)}}
+.bonusbtn span{font-family:var(--body);font-size:12px;font-weight:700;opacity:.8}
+.bonusbtn:disabled{background:#efe3cc;opacity:.8;cursor:default;animation:none}
+.ring{--p:360deg;width:96px;height:96px;margin:6px auto 4px;border-radius:50%;border:4px solid var(--ink);
+  background:conic-gradient(var(--orange) var(--p),#fff 0);display:flex;align-items:center;justify-content:center;transition:background .3s}
+.ring span{width:62px;height:62px;border-radius:50%;background:var(--cream);border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-weight:800;font-size:28px}
+#videoOver{z-index:40;background:rgba(43,29,20,.7)}
 .scores{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
 .scores div{border:3px solid var(--ink);border-radius:14px;padding:8px;text-align:center;background:#fff}
 .scores b{display:block;font-family:var(--display);font-size:24px}
@@ -183,6 +204,7 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
     <h1 class="logo">BOO<br>GOBBLE</h1>
     <canvas id="preview" width="440" height="440"></canvas>
     <input id="nameIn" maxlength="14" placeholder="Your ghost name" aria-label="Ghost name">
+    <div class="levelcard" id="hLevel"></div>
     <div class="chips">
       <div class="chip"><b id="hBest">0</b><span>Best</span></div>
       <div class="chip"><b id="hStreak">1</b><span>Day streak</span></div>
@@ -193,6 +215,7 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
     <button class="btn" id="howBtn" style="width:100%">❓ HOW TO PLAY</button>
   </div>
   <div>
+    <button class="btn bonusbtn" id="freeCandyBtn">📺 Watch ad: <b>+50 🍬</b><span>3 free candy ads a day</span></button>
     <div class="tabs" id="tabs">
       <button class="tab on" data-tab="upgrades">⚡ Upgrades</button>
       <button class="tab" data-tab="colors">🎨 Colors</button>
@@ -208,7 +231,7 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
 <!-- PAUSE -->
 <div class="over dim" id="pause"><div class="panel" style="width:min(380px,100%);text-align:center">
   <h2>PAUSED</h2>
-  <div class="sub">Mass <b id="pMass">0</b> · 🍬 <b id="pEarn">0</b> earned so far</div>
+  <div class="sub">Mass <b id="pMass">0</b> · <b id="pEarn">0</b> earned so far</div>
   <div class="actions" style="flex-direction:column">
     <button class="btn hot" id="resumeBtn">▶ RESUME</button>
     <button class="btn" id="quitBtn">🏠 QUIT TO HOME</button>
@@ -220,6 +243,7 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
 <div class="over dim" id="results"><div class="panel" style="width:min(480px,100%)">
   <h2 id="rTitle">GOBBLED!</h2>
   <div class="sub" id="rSub"></div>
+  <div class="levelcard" id="rXp"></div>
   <div class="scores">
     <div><b id="rPeak">0</b><span>Peak mass</span></div>
     <div><b id="rEat">0</b><span>Ghosts eaten</span></div>
@@ -250,15 +274,22 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
       <p>A short burst of speed to catch prey or escape. It costs 8% of your mass, which drops behind you as candy, and needs a moment to recharge. You need at least 18 mass to dash.</p>
       <p>Big ghosts are slower and shrink slowly over time, so small ghosts can always get away.</p>
     </section>
-    <section><h3>🍬 Earning candy</h3>
-      <p>When a run ends you earn <b>peak mass ÷ 3</b>, plus <b>5 per ghost eaten</b>. Then two bonuses multiply that:</p>
+    <section><h3>🍬 Earning candy (solo)</h3>
+      <p>When a solo run ends you earn <b>peak mass ÷ 3</b>, plus <b>5 per ghost eaten</b>. Then two bonuses multiply that:</p>
       <p><b>⏱ Time:</b> x1.5 at 2:00, x2 at 4:00, x2.5 at 6:00, x3 at 8:00+.<br><b>🏆 Rank:</b> best leaderboard spot #1 x1.5 · #2–3 x1.3 · #4–5 x1.15.</p>
-      <p>Paused time doesn't count. Quitting from the pause menu still pays what you've earned.</p>
+      <p>Paused time doesn't count. Quitting from the pause menu still pays what you've earned. <b>Candy from party matches is just for fun and never reaches your balance.</b></p>
+    </section>
+    <section class="wide"><h3>⭐ XP, levels &amp; ranks</h3>
+      <p>Every match, solo or party, earns XP: <b>peak mass ÷ 2</b> + <b>15 per gobble</b> + <b>1 per 2 seconds alive</b> + a placing bonus (<b>#1 +100</b>, top 3 +60, top 5 +30). Party matches give <b>x1.2 XP</b>. Level 1→2 takes 100 XP, and each level after needs 50 more.</p>
+      <p>Your level sets your rank: <span class="tiers"><b style="color:#c7793b">🥉 Bronze</b> 1–4 · <b style="color:#9aa4ad">🥈 Silver</b> 5–9 · <b style="color:#e0a800">🥇 Gold</b> 10–19 · <b style="color:#3fb8b0">💠 Platinum</b> 20–29 · <b style="color:#4a8cff">💎 Diamond</b> 30–39 · <b style="color:#8e44d6">👑 Master</b> 40–49 · <b style="color:#ff4f1f">🔥 Legend</b> 50+</span></p>
+      <p>Every ghost's rank badge and level show next to its name and on the leaderboard, so you can size up rivals and friends.</p>
     </section>
     <section><h3>🛍 Shop</h3>
       <p><b>Upgrades</b> (5 levels each): Zoom (speed), Magnet (pulls candy in), Big Start (start bigger), Quick Dash (faster recharge).</p>
       <p><b>Colors</b>, <b>Looks</b> (hats and more) and <b>Emotes</b> change how you look. Hover over any item to preview it before buying.</p>
       <p>Come back every day for a streak bonus: 30 candy × your streak day, up to day 7.</p>
+      <p><b>📺 Free candy:</b> watch a short ad on the home screen for <b>+50 candy</b> (+2 more per level). Up to 3 ads a day.</p>
+      <p><b>📺 Revive:</b> in solo, when you get eaten you can watch an ad to come back with the same mass and 3 seconds of protection, once per run.</p>
     </section>
     <section><h3>😄 Faces &amp; emotes</h3>
       <p>Your ghost's face reacts on its own: <b>scared</b> near danger, <b>angry</b> when chasing prey, <b>happy</b> after a gobble, mouth wide open while dashing.</p>
@@ -267,7 +298,7 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
     <section class="wide"><h3>👥 Play with friends</h3>
       <p><b>Host:</b> tap <b>Play with friends → Create party</b>. You get a 4-letter code and an invite link. Pick the arena size (12, 20 or 28 ghosts) and press <b>Start</b> when you're ready.</p>
       <p><b>Friends:</b> tap <b>Play with friends</b>, type the code and press <b>Join</b>, or just open the invite link. Up to 8 players per party, and friends can jump in even after the match has started.</p>
-      <p><b>Bots fill the empty seats</b>, and one steps aside each time a friend joins. Friends have teal names and a 👥 on the leaderboard. If you get eaten, press <b>Respawn</b> to jump back in. Party matches keep running while you're paused, and the party ends if the host leaves.</p>
+      <p><b>Bots fill the empty seats</b>, and one steps aside each time a friend joins. Friends have teal names and a 👥 on the leaderboard. If you get eaten, press <b>Respawn</b> to jump back in. Party candy doesn't count toward your balance, but you earn <b>x1.2 XP</b>. Party matches keep running while you're paused, and the party ends if the host leaves.</p>
     </section>
   </div>
   <div class="actions"><button class="btn hot" id="closeHow">GOT IT!</button></div>
@@ -307,12 +338,35 @@ h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:u
   </div>
 </div></div>
 
+<!-- REVIVE (solo only) -->
+<div class="over dim" id="revive"><div class="panel" style="width:min(400px,100%);text-align:center">
+  <h2>GOBBLED!</h2>
+  <div class="sub">Watch a short ad to come back with your <b id="rvMass">0</b> mass, plus 3 seconds of protection. You get one revive per run.</div>
+  <div class="ring" id="rvRing"><span id="rvCount">8</span></div>
+  <div class="actions" style="flex-direction:column">
+    <button class="btn hot" id="rvBtn">📺 WATCH AD &amp; REVIVE</button>
+    <button class="btn" id="rvNo">No thanks</button>
+  </div>
+</div></div>
+
+<!-- TEST AD (shown outside CrazyGames, where real ads can't play) -->
+<div class="over" id="videoOver"><div class="panel" style="width:min(420px,100%);text-align:center;background:#2b1d14;color:#fffaf0">
+  <div class="pmode" style="color:#ffc23d">Test ad · real ads only play on CrazyGames</div>
+  <div style="font-size:64px;margin:6px 0">📺</div>
+  <div class="sub" id="taCount">Reward in 4…</div>
+  <div class="xpbar" style="--c:#ffc23d"><i id="taBar" style="width:0%;transition:width 1s linear"></i></div>
+  <div class="actions"><button class="btn" id="taClose">✕ Close (no reward)</button><button class="btn hot" id="taSkip">Watching…</button></div>
+</div></div>
+
+<!-- CrazyGames SDK v3: real ads on crazygames.com; blocked or disabled elsewhere, where the game falls back to test ads -->
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 <!-- Photon Realtime JavaScript SDK: drop Photon-Javascript_SDK.min.js next to this file to enable online parties -->
 <script src="Photon-Javascript_SDK.min.js"></script>
 <script src="data.js"></script>
 <script src="draw.js"></script>
 <script src="net.js"></script>
 <script src="game.js"></script>
+<script src="ads.js"></script>
 <script src="ui.js"></script>
 <script src="party.js"></script>
 </body>

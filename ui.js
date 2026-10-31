@@ -1,11 +1,11 @@
 'use strict';
 // ---------- screens ----------
-const OVERS = ['home', 'pause', 'results', 'howOver', 'partyOver'];
+const OVERS = ['home', 'pause', 'results', 'howOver', 'partyOver', 'revive'];
 function show(id) { for (const o of OVERS) $(o).classList.toggle('show', o === id); }
 function setRunUI(on) { document.body.classList.toggle('in-run', on); }
 
 function enterPlay() {
-  state = 'play';
+  state = 'play'; Ads.gameplay(true);
   $('hint').style.opacity = 1;
   show(null); setRunUI(true); buildEmoteBar();
   mouse.x = innerWidth / 2 + 60; mouse.y = innerHeight / 2; lockPointer();
@@ -24,18 +24,39 @@ function startRun() {
 }
 function bank() {
   const peak = Math.round(runStats.peak), earned = earnedSoFar(), newBest = peak > save.best;
-  save.candy += earned; save.best = Math.max(save.best, peak); save.runs++; persist();
-  return { peak, earned, newBest };
+  const xp = matchXp(), before = levelInfo(save.xp);
+  save.candy += earned; save.xp += xp.total; save.best = Math.max(save.best, peak); save.runs++; persist();
+  const after = levelInfo(save.xp);
+  if (after.lvl > before.lvl) setTimeout(() => {
+    toast(after.tier !== before.tier ? `${after.tier.icon} Promoted to ${after.tier.name}! Level ${after.lvl}` : `⭐ Level up! You're now level ${after.lvl}`);
+    blip(523, 0.15, 'triangle', 0.06, 1.2); setTimeout(() => blip(659, 0.15, 'triangle', 0.06, 1.2), 140); setTimeout(() => blip(784, 0.3, 'triangle', 0.06, 1.5), 280);
+  }, 500);
+  return { peak, earned, newBest, xp, before, after };
+}
+function xpBarHtml(info, gainedFrom) {
+  const pct = Math.round(info.into / info.need * 100);
+  const start = gainedFrom != null ? Math.round(gainedFrom * 100) : pct;
+  return `<div class="xpbar" style="--c:${info.tier.color}"><i style="width:${start}%" data-to="${pct}"></i></div>
+    <div class="xpnums">${info.into} / ${info.need} XP to level ${info.lvl + 1}</div>`;
 }
 function showResults() {
   if (state !== 'play' && state !== 'paused') return;
-  state = 'dead'; unlockPointer();
+  state = 'dead'; unlockPointer(); Ads.gameplay(false);
   const pay = payout();
-  const { peak, earned, newBest } = bank();
-  $('rTitle').textContent = newBest ? 'NEW BEST!' : 'GOBBLED!';
+  const { peak, earned, newBest, xp, before, after } = bank();
+  $('rTitle').textContent = after.lvl > before.lvl ? 'LEVEL UP!' : newBest ? 'NEW BEST!' : 'GOBBLED!';
   const tStr = `${Math.floor(runStats.t / 60)}:${String(Math.floor(runStats.t % 60)).padStart(2, '0')}`;
-  $('rSub').innerHTML = `${runStats.killer ? `Eaten by <b>${esc(runStats.killer)}</b>. ` : ''}You earned <b>🍬 ${earned}</b> candy.
+  const killed = runStats.killer ? `Eaten by <b>${esc(runStats.killer)}</b>. ` : '';
+  $('rSub').innerHTML = mp
+    ? `${killed}Party match: candy doesn't count toward your balance, but your XP does.`
+    : `${killed}You earned <b>🍬 ${earned}</b> candy.
     <div class="breakdown"><span>Base 🍬 ${pay.base}</span><span>⏱ ${tStr} survived <b>x${pay.tm}</b></span><span>🏆 Best rank #${runStats.bestRank > 50 ? '–' : runStats.bestRank} <b>x${pay.rm}</b></span></div>`;
+  const same = after.lvl === before.lvl;
+  $('rXp').innerHTML = `<div class="xphead"><span class="tierpill" style="background:${after.tier.color}">${after.tier.icon} ${after.tier.name} · Lv ${after.lvl}</span>
+      <b>+${xp.total} XP</b></div>
+    <div class="breakdown xpb"><span>Size +${xp.peak}</span><span>Gobbles +${xp.eats}</span><span>⏱ ${tStr} +${xp.time}</span>${xp.place ? `<span>🏆 Top ${runStats.bestRank === 1 ? '1' : runStats.bestRank <= 3 ? '3' : '5'} +${xp.place}</span>` : ''}${xp.mult > 1 ? `<span>👥 Party x${xp.mult}</span>` : ''}</div>
+    ${xpBarHtml(after, same ? before.into / before.need : 0)}`;
+  requestAnimationFrame(() => requestAnimationFrame(() => { const i = $('rXp').querySelector('.xpbar i'); if (i) i.style.width = i.dataset.to + '%'; }));
   $('rPeak').textContent = peak; $('rEat').textContent = runStats.eaten; $('rBest').textContent = save.best;
   $('againBtn').textContent = mp ? 'RESPAWN ▶' : 'PLAY AGAIN ▶';
   $('homeBtn').innerHTML = mp ? '🚪 LEAVE PARTY' : '🏠 HOME &amp; SHOP';
@@ -43,11 +64,13 @@ function showResults() {
 }
 function togglePause() {
   if (state === 'play') {
-    state = 'paused'; unlockPointer();
-    $('pMass').textContent = Math.round(player.alive ? player.m : runStats.peak); $('pEarn').textContent = earnedSoFar();
+    state = 'paused'; unlockPointer(); Ads.gameplay(false);
+    $('pMass').textContent = Math.round(player.alive ? player.m : runStats.peak);
+    $('pEarn').innerHTML = mp ? `⭐ ${matchXp().total} XP` : `🍬 ${earnedSoFar()} · ⭐ ${matchXp().total} XP`;
     const p = payout();
-    $('quitNote').textContent = (mp ? 'The party keeps playing while you\'re paused, and your ghost stands still. ' : '') +
-      `Current bonus: time x${p.tm} · rank x${p.rm}. Quitting banks your candy, but staying longer earns more.`;
+    $('quitNote').textContent = mp
+      ? 'The party keeps playing while you\'re paused, and your ghost stands still. Party candy doesn\'t count, but leaving now still banks your XP.'
+      : `Current bonus: time x${p.tm} · rank x${p.rm}. Quitting banks your candy and XP, but staying longer earns more.`;
     $('quitBtn').innerHTML = mp ? '🚪 LEAVE PARTY' : '🏠 QUIT TO HOME';
     show('pause'); blip(300, 0.1, 'triangle', 0.05, 0.8);
   } else if (state === 'paused') {
@@ -56,12 +79,15 @@ function togglePause() {
   }
 }
 function quitToHome() {
-  if (state === 'paused' || state === 'play') { const { earned } = bank(); toast(`Banked 🍬 ${earned} candy`); }
+  if (state === 'paused' || state === 'play') {
+    const { earned, xp } = bank();
+    toast(mp ? `Banked ⭐ ${xp.total} XP` : `Banked 🍬 ${earned} candy · ⭐ ${xp.total} XP`);
+  }
   goHome();
 }
 function goHome() {
   if (mp) mp.leave();
-  state = 'home'; unlockPointer(); resetWorld(true); setRunUI(false); show('home'); renderHome();
+  state = 'home'; unlockPointer(); Ads.gameplay(false); resetWorld(true); setRunUI(false); show('home'); renderHome();
 }
 $('playBtn').addEventListener('click', startRun);
 $('againBtn').addEventListener('click', startRun);
@@ -97,7 +123,10 @@ const HINTS = {
 function renderHome() {
   $('nameIn').value = save.name;
   $('hBest').textContent = save.best; $('hStreak').textContent = save.streak || 1; $('hRuns').textContent = save.runs;
-  $('wallet').textContent = save.candy;
+  const li = levelInfo(save.xp), nextTier = TIERS.find(t => t.from > li.lvl);
+  $('hLevel').innerHTML = `<div class="xphead"><span class="tierpill" style="background:${li.tier.color}">${li.tier.icon} ${li.tier.name}</span><b>Level ${li.lvl}</b></div>
+    ${xpBarHtml(li)}<div class="xpnums">${nextTier ? `${nextTier.icon} ${nextTier.name} at level ${nextTier.from}` : 'Top rank reached!'}</div>`;
+  $('wallet').textContent = save.candy; if (typeof renderAdBtn === 'function') renderAdBtn();
   $('muteBtn').textContent = save.muted ? '🔇' : '🔊';
   for (const b of document.querySelectorAll('.tab')) b.classList.toggle('on', b.dataset.tab === tab);
   $('shopHint').textContent = HINTS[tab];
@@ -187,12 +216,12 @@ function dailyBonus() {
 }
 
 // ---------- loop ----------
-resize(); resetWorld(true); dailyBonus(); renderHome();
+resize(); resetWorld(true); dailyBonus(); renderHome(); Ads.init();
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (mp && !mp.isHost && mp.inMatch) mp.guestTick(dt);
-  else if (state !== 'paused' || mp) { update(dt); if (mp) mp.hostTick(dt); } // party worlds never pause
+  else if ((state !== 'paused' && !adPlaying) || mp) { update(dt); if (mp) mp.hostTick(dt); } // party worlds never pause
   render(now, state === 'paused' ? 0 : dt); hud(dt);
   if (state === 'home') drawPreview(now);
   document.body.classList.toggle('hide-cursor', state === 'play');

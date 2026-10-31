@@ -28,7 +28,7 @@ class Party {
 
   // ---------- host ----------
   lobbyPayload() {
-    return { m: [...this.members].map(([id, l]) => [id, l.name, l.skin, l.hat, l.host ? 1 : 0]), s: this.slots, i: this.inMatch ? 1 : 0 };
+    return { m: [...this.members].map(([id, l]) => [id, l.name, l.skin, l.hat, l.host ? 1 : 0, l.lvl || 1]), s: this.slots, i: this.inMatch ? 1 : 0 };
   }
   broadcastLobby() { this.net.send(EV.LOBBY, this.lobbyPayload()); this.renderLobby(); }
   spawnRemote(peer) {
@@ -61,7 +61,7 @@ class Party {
     const snap = {
       g: live.map(g => [g.id, g.x | 0, g.y | 0, r1(g.m), g.vx | 0, g.vy | 0, Math.max(0, MOODS.indexOf(g.mood)),
         g.emoteT > 0 ? EMOTES.findIndex(e => e.id === g.emote) : -1, r1(Math.max(0, g.emoteT)), g.dashT > 0 ? 1 : 0]),
-      mt: live.filter(g => full || now - g.born < 3000).map(g => [g.id, g.name, g.body, g.hat, g.isPlayer ? this.net.myId : (g.peer || 0)]),
+      mt: live.filter(g => full || now - g.born < 3000).map(g => [g.id, g.name, g.body, g.hat, g.isPlayer ? this.net.myId : (g.peer || 0), g.lvl || 1]),
       fa: foodAdded.map(f => [f.id, f.x | 0, f.y | 0, r1(f.m), f.ci]),
       fr: foodRemoved,
     };
@@ -87,7 +87,7 @@ class Party {
     food.push(f); this.foodMap.set(id, f);
   }
   applySnap(d) {
-    for (const [id, name, body, hat, peer] of d.mt) this.meta.set(id, { name, body, hat, peer });
+    for (const [id, name, body, hat, peer, lvl] of d.mt) this.meta.set(id, { name, body, hat, peer, lvl });
     const seen = new Set();
     for (const [id, x, y, m, vx, vy, mood, em, emT, dashing] of d.g) {
       seen.add(id);
@@ -101,7 +101,7 @@ class Party {
       if (em >= 0) { g.emote = EMOTES[em].id; g.emoteT = emT; } else g.emoteT = 0;
       const mt = this.meta.get(id);
       if (mt) {
-        g.name = mt.name; g.body = mt.body; g.hat = mt.hat; g.human = !!mt.peer;
+        g.name = mt.name; g.body = mt.body; g.hat = mt.hat; g.human = !!mt.peer; g.lvl = mt.lvl || 1;
         const mine = mt.peer === this.net.myId;
         if (mine && !g.isPlayer && state !== 'dead') { g.isPlayer = true; player = g; if (runStats.peak < g.m) runStats.peak = g.m; }
       }
@@ -152,7 +152,7 @@ class Party {
     if (this.isHost) {
       if (c === EV.HELLO) {
         if (this.members.size >= MAX_PARTY) { this.net.send(EV.FULL, {}, from); return; }
-        this.members.set(from, { name: String(d.name || 'Friend').slice(0, 14), skin: d.skin | 0, hat: d.hat | 0, lv: d.lv || {} });
+        this.members.set(from, { name: String(d.name || 'Friend').slice(0, 14), skin: d.skin | 0, hat: d.hat | 0, lv: d.lv || {}, lvl: Math.max(1, d.lvl | 0) });
         this.net.send(EV.WELCOME, Object.assign(this.lobbyPayload(), { f: this.inMatch ? this.packFood() : null }), from);
         if (this.inMatch) this.spawnRemote(from);
         this.broadcastLobby();
@@ -164,7 +164,7 @@ class Party {
         if (d.e && EMOTES.some(e => e.id === d.e)) emote(g, d.e);
       } else if (c === EV.RESPAWN) {
         const look = this.members.get(from); if (!look || !this.inMatch || this.ghostOf(from)) return;
-        Object.assign(look, { name: String(d.name || look.name).slice(0, 14), skin: d.skin | 0, hat: d.hat | 0, lv: d.lv || look.lv });
+        Object.assign(look, { name: String(d.name || look.name).slice(0, 14), skin: d.skin | 0, hat: d.hat | 0, lv: d.lv || look.lv, lvl: Math.max(1, d.lvl | 0) });
         this.spawnRemote(from);
       } else if (c === EV.BYE) this.onLeave(from);
       return;
@@ -201,9 +201,9 @@ class Party {
     if (d) { this.slots = d.s; this.inMatch = this.inMatch || !!d.i; this.lobbyList = d.m; }
     const list = this.isHost ? this.lobbyPayload().m : (this.lobbyList || []);
     $('pCode').textContent = this.code;
-    $('pMembers').innerHTML = list.map(([id, name, skin, hat, host]) => `<div class="mem">
+    $('pMembers').innerHTML = list.map(([id, name, skin, hat, host, lvl]) => `<div class="mem">
       <canvas width="72" height="72" data-skin="${skin}" data-hat="${hat}"></canvas>
-      <b>${esc(name)}</b>${host ? '<span class="crown">HOST</span>' : ''}${id === this.net.myId ? '<span class="you">YOU</span>' : ''}</div>`).join('') +
+      <b>${esc(name)}</b><span class="mlvl" style="color:${tierOf(lvl || 1).color}">${tierOf(lvl || 1).icon} Lv ${lvl || 1} · ${tierOf(lvl || 1).name}</span>${host ? '<span class="crown">HOST</span>' : ''}${id === this.net.myId ? '<span class="you">YOU</span>' : ''}</div>`).join('') +
       Array.from({ length: Math.max(0, MAX_PARTY - list.length) }, () => '<div class="mem empty">open seat</div>').join('');
     for (const c of $('pMembers').querySelectorAll('canvas')) paintThumb(c, { body: SKINS[+c.dataset.skin].body, hat: +c.dataset.hat, mood: 'happy' });
     const bots = Math.max(0, this.slots - list.length);

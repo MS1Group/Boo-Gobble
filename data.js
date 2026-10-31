@@ -39,11 +39,31 @@ const UPG = [
 const MAXLV = 5;
 const upgCost = lv => Math.round(40 * Math.pow(lv + 1, 1.5));
 
+// ---------- XP, levels & rank tiers ----------
+const TIERS = [
+  { name: 'Bronze', from: 1, icon: '🥉', color: '#c7793b' },
+  { name: 'Silver', from: 5, icon: '🥈', color: '#9aa4ad' },
+  { name: 'Gold', from: 10, icon: '🥇', color: '#e0a800' },
+  { name: 'Platinum', from: 20, icon: '💠', color: '#3fb8b0' },
+  { name: 'Diamond', from: 30, icon: '💎', color: '#4a8cff' },
+  { name: 'Master', from: 40, icon: '👑', color: '#8e44d6' },
+  { name: 'Legend', from: 50, icon: '🔥', color: '#ff4f1f' },
+];
+const xpForNext = lvl => 100 + (lvl - 1) * 50; // XP to go from lvl to lvl+1
+function levelInfo(xp) {
+  let lvl = 1, left = Math.max(0, xp | 0);
+  while (left >= xpForNext(lvl)) { left -= xpForNext(lvl); lvl++; }
+  return { lvl, into: left, need: xpForNext(lvl), tier: tierOf(lvl) };
+}
+function tierOf(lvl) { let t = TIERS[0]; for (const x of TIERS) if (lvl >= x.from) t = x; return t; }
+// bots get a believable spread of levels so the arena mixes ranks
+const botLevel = () => Math.max(1, Math.round(Math.pow(Math.random(), 1.8) * 52) + 1);
+
 // ---------- save ----------
 const SAVE_KEY = 'boogobble_v1';
 const save = {
   candy: 0, best: 0, lv: { speed: 0, magnet: 0, size: 0, dash: 0 }, skins: [0], skin: 0,
-  hats: [0, 1], hat: 1, emotes: ['happy', 'angry', 'scared'], name: '',
+  hats: [0, 1], hat: 1, emotes: ['happy', 'angry', 'scared'], name: '', xp: 0,
   day: '', streak: 0, runs: 0, muted: false,
 };
 try {
@@ -55,7 +75,7 @@ const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save
 // ---------- audio ----------
 let ac = null;
 function blip(f, d = 0.08, type = 'sine', vol = 0.06, slide = 1.6) {
-  if (save.muted) return;
+  if (save.muted || (typeof adPlaying !== "undefined" && adPlaying)) return;
   try {
     if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
     if (ac.state === 'suspended') ac.resume();
