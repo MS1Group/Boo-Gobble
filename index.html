@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Boo Gobble</title>
+<style>
+:root{
+  --bg:#fbf1df; --ink:#2b1d14; --orange:#ff6a1f; --plum:#5b2a86;
+  --lime:#7cc142; --cream:#fffaf0; --gold:#ffc23d; --red:#d42f2f; --green:#3f8f2a;
+  --display:"Futura","Avenir Next Condensed","Trebuchet MS",sans-serif;
+  --body:"Avenir Next","Gill Sans","Trebuchet MS",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--body);
+  -webkit-user-select:none;user-select:none;touch-action:none}
+#c{display:block;position:fixed;inset:0;width:100vw;height:100vh}
+body.hide-cursor,body.hide-cursor *{cursor:none !important}
+.hud{position:fixed;pointer-events:none;font-family:var(--display);z-index:2}
+body:not(.in-run) .run-only{display:none !important}
+.card-ui{background:var(--cream);border:3px solid var(--ink);border-radius:14px;box-shadow:4px 4px 0 var(--ink)}
+#stats{top:14px;left:14px;padding:8px 14px;min-width:170px}
+#stats .big{font-size:26px;font-weight:800;letter-spacing:.5px}
+#stats .small{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.7}
+#power{margin-top:6px;font-size:13px;font-family:var(--body);line-height:1.5}
+#power .g{color:var(--green);font-weight:800}#power .r{color:var(--red);font-weight:800}
+#bonus{margin-top:8px;padding-top:6px;border-top:2px dashed rgba(43,29,20,.25);font-family:var(--body);font-size:12px;width:200px}
+#bonus .brow{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+#bonus .brow b{font-family:var(--display);font-size:18px;color:var(--orange)}
+#bonus .bar{height:9px;border:2px solid var(--ink);border-radius:99px;background:#fff;overflow:hidden;margin:4px 0}
+#bonus .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--orange));transition:width .2s}
+#bonus .bnext{opacity:.75}
+.breakdown{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.breakdown span{border:2px solid var(--ink);border-radius:999px;padding:3px 10px;background:#fff;font-size:13px}
+#board{top:14px;right:14px;padding:8px 12px;width:190px;font-size:14px}
+#board h4{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--orange);margin-bottom:4px}
+#board .row{display:flex;justify-content:space-between;padding:1px 0;gap:6px}
+#board .row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#board .me{color:var(--plum);font-weight:800}
+#mini{right:14px;bottom:64px;width:130px;height:130px;border-radius:12px}
+#hint{left:50%;top:22%;transform:translateX(-50%);text-align:center;transition:opacity .8s}
+#hint .k{display:inline-block;border:2px solid var(--ink);border-radius:8px;padding:2px 8px;margin:0 2px;background:var(--cream);font-weight:800}
+#hint p{font-size:18px;margin:6px 0;background:rgba(255,250,240,.85);padding:4px 12px;border-radius:10px}
+#toast{left:50%;top:90px;transform:translateX(-50%);background:var(--gold);border:3px solid var(--ink);border-radius:999px;
+  padding:6px 18px;font-weight:800;box-shadow:3px 3px 0 var(--ink);opacity:0;transition:opacity .4s;z-index:30;white-space:nowrap}
+.btn{font-family:var(--display);font-weight:800;border:3px solid var(--ink);border-radius:12px;background:var(--cream);
+  color:var(--ink);padding:8px 14px;font-size:15px;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:3px 3px 0 var(--ink);font-size:15px}
+.btn.hot{background:var(--orange);color:var(--cream)}
+.btn.plum{background:var(--plum);color:var(--cream)}
+#runBtns{position:fixed;left:14px;bottom:64px;display:flex;gap:8px;z-index:3}
+#emoteBar{position:fixed;left:50%;transform:translateX(-50%);bottom:56px;display:flex;gap:6px;z-index:3}
+.emo{position:relative;width:46px;height:46px;font-size:24px;border:3px solid var(--ink);border-radius:12px;background:var(--cream);
+  box-shadow:3px 3px 0 var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.emo:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.emo i{position:absolute;top:-8px;left:-8px;font-style:normal;font-family:var(--display);font-size:11px;font-weight:800;
+  background:var(--ink);color:var(--cream);border-radius:6px;padding:1px 5px}
+#dashBtn{position:fixed;right:24px;bottom:240px;width:84px;height:84px;border-radius:50%;display:none;font-size:16px;z-index:3}
+
+/* overlays */
+.over{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:16px 16px 60px;z-index:10}
+.over.show{display:flex}
+.dim{background:rgba(43,29,20,.38)}
+.panel{background:var(--cream);border:4px solid var(--ink);border-radius:22px;box-shadow:8px 8px 0 var(--ink);
+  max-height:100%;overflow:auto;padding:22px 24px;animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.7) rotate(-3deg);opacity:0}to{transform:none;opacity:1}}
+h1.logo{font-family:var(--display);font-size:46px;line-height:.95;color:var(--orange);text-shadow:3px 3px 0 var(--ink);letter-spacing:1px}
+.panel h2{font-family:var(--display);font-size:36px;line-height:1;color:var(--orange);text-shadow:3px 3px 0 var(--ink);letter-spacing:1px}
+.sub{margin:6px 0 14px;font-size:15px}
+h3{font-family:var(--display);font-size:14px;letter-spacing:2px;text-transform:uppercase;margin:12px 0 8px;color:var(--plum)}
+
+/* home */
+#home{background:rgba(251,241,223,.55)}
+#homeCard{width:min(920px,100%);display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:22px}
+#homeLeft{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px}
+#preview{width:220px;height:220px;background:radial-gradient(circle at 50% 70%,#ffe2c2 0 45%,transparent 46%);}
+#nameIn{font-family:var(--display);font-weight:800;font-size:18px;text-align:center;border:3px solid var(--ink);border-radius:12px;
+  padding:8px;width:100%;background:#fff;color:var(--ink)}
+#playBtn{width:100%;font-size:28px;padding:14px;letter-spacing:1px}
+.chips{display:flex;gap:6px;width:100%}
+.chip{flex:1;border:3px solid var(--ink);border-radius:12px;background:#fff;padding:5px 4px}
+.chip b{display:block;font-family:var(--display);font-size:20px}
+.chip span{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;opacity:.7}
+.linky{background:none;border:none;color:var(--plum);text-decoration:underline;cursor:pointer;font-family:var(--body);font-size:13px;margin-top:4px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tab{font-family:var(--display);font-weight:800;font-size:14px;border:3px solid var(--ink);border-radius:999px;padding:6px 14px;
+  background:#fff;cursor:pointer}
+.tab.on{background:var(--ink);color:var(--cream)}
+.wallet{font-family:var(--display);font-weight:800;font-size:18px;margin-left:auto;align-self:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.item{border:3px solid var(--ink);border-radius:14px;padding:8px;background:#fff;cursor:pointer;text-align:center;font-size:13px;
+  position:relative;transition:transform .12s}
+.item:hover{transform:translateY(-3px) rotate(-1deg);background:#fff3df}
+.item.eq{background:#ffe9d2;outline:4px solid var(--orange);outline-offset:-1px}
+.item.lock .price{color:var(--plum)}
+.item.poor .price{color:var(--red)}
+.item canvas{width:80px;height:80px;display:block;margin:0 auto}
+.item .t{font-family:var(--display);font-weight:800;font-size:15px}
+.item .price{font-family:var(--display);font-weight:800;margin-top:2px}
+.item .tagx{position:absolute;top:6px;right:6px;font-size:10px;font-family:var(--display);font-weight:800;background:var(--green);color:#fff;
+  border-radius:6px;padding:1px 5px}
+.pips{margin:4px 0;letter-spacing:2px;color:var(--orange)}
+.swatch{width:62px;height:62px;border-radius:50%;border:3px solid var(--ink);margin:6px auto}
+.shake{animation:shk .35s}
+@keyframes shk{20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+.how{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.how section{border:3px solid var(--ink);border-radius:16px;background:#fff;padding:10px 14px}
+.how section.wide{grid-column:1/-1;background:#f3ebff}
+.how h3{margin:0 0 6px}
+.how p{font-size:14px;line-height:1.45;margin:5px 0}
+.k{display:inline-block;border:2px solid var(--ink);border-radius:7px;padding:0 6px;background:var(--cream);font-family:var(--display);font-weight:800;font-size:12px}
+.tg{color:var(--green)}.tr{color:var(--red)}.te{color:#8a7a63}
+.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pbox{border:3px solid var(--ink);border-radius:16px;background:#fff;padding:12px;display:flex;flex-direction:column;gap:8px}
+.pbox h3{margin:0}.pbox p{font-size:13px;flex:1}
+#joinCode{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase;
+  border:3px solid var(--ink);border-radius:12px;padding:6px;width:100%;background:var(--cream);color:var(--ink)}
+.pmsg{margin-top:10px;font-size:14px;font-weight:700;min-height:20px;color:var(--plum)}
+.pmsg.err{color:var(--red)}
+.pmode{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--plum);margin-bottom:8px}
+.codebox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:3px dashed var(--ink);border-radius:16px;padding:10px 14px;background:#fff3df}
+.codebox span{font-size:11px;letter-spacing:2px;font-weight:800}
+.codebox b{font-family:var(--display);font-size:40px;letter-spacing:8px;color:var(--orange);text-shadow:2px 2px 0 var(--ink);flex:1}
+.members{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.mem{border:3px solid var(--ink);border-radius:14px;background:#fff;padding:4px;text-align:center;font-size:13px;position:relative;min-height:96px}
+.mem canvas{width:56px;height:56px;display:block;margin:0 auto}
+.mem b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mem .crown,.mem .you{position:absolute;top:4px;font-size:9px;font-family:var(--display);font-weight:800;border-radius:6px;padding:1px 4px;color:#fff}
+.mem .crown{left:4px;background:var(--orange)}.mem .you{right:4px;background:var(--plum)}
+.mem.empty{border-style:dashed;opacity:.45;display:flex;align-items:center;justify-content:center}
+.tab:disabled{opacity:.6;cursor:default}
+.pwait{flex:1;align-self:center;text-align:center;font-weight:800;color:var(--plum)}
+#homeLeft .btn{width:100%}
+@media (max-width:760px){.how,.pgrid{grid-template-columns:minmax(0,1fr)}.members{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.scores{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.scores div{border:3px solid var(--ink);border-radius:14px;padding:8px;text-align:center;background:#fff}
+.scores b{display:block;font-family:var(--display);font-size:24px}
+.scores span{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.7}
+.actions{display:flex;gap:10px;margin-top:16px}
+.actions .btn{flex:1;font-size:19px;padding:12px}
+#notes li{margin:5px 0 5px 18px;font-size:14px;line-height:1.45}
+#notes a{color:var(--plum)}
+.keys{font-size:13px;opacity:.75;margin-top:8px}
+
+@media (max-width:760px){
+  #homeCard{grid-template-columns:minmax(0,1fr)}
+  #preview{width:150px;height:150px}
+  h1.logo{font-size:36px}
+  #board{width:150px;font-size:12px}
+  #stats{min-width:140px}#stats .big{font-size:20px}
+  #power{font-size:11px}
+  .emo{width:40px;height:40px;font-size:20px}
+}
+@media print{#c,.hud,#runBtns,#emoteBar,#dashBtn{display:none}.over{position:static;background:none}.panel{box-shadow:none;animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="stats" class="hud card-ui run-only"><div class="small">Mass</div><div class="big" id="mass">20</div><div class="small" id="candy">🍬 0</div><div id="power"></div><div id="bonus"></div></div>
+<div id="board" class="hud card-ui run-only"><h4>Top Ghosts</h4><div id="rows"></div></div>
+<canvas id="mini" class="hud card-ui run-only" width="130" height="130"></canvas>
+<div id="hint" class="hud run-only">
+  <p>Move your <span class="k">mouse</span> or <span class="k">WASD</span> · <span class="k">drag</span> on touch</p>
+  <p>Eat candy &amp; <b style="color:#3f8f2a">EAT</b> ghosts. Flee <b style="color:#d42f2f">RUN</b> ghosts!</p>
+  <p><span class="k">Space</span> dash · <span class="k">1–7</span> emotes · <span class="k">Esc</span> pause</p>
+  <p>🍬 Stay alive for <b>x1.5 candy at 2:00</b> (up to x3) · reach the <b>top 5</b> for up to x1.5 more</p>
+</div>
+<div id="toast" class="hud"></div>
+<div id="runBtns" class="run-only">
+  <button class="btn" id="pauseBtn" title="Pause (Esc or P)">⏸ Pause</button>
+  <button class="btn" id="muteBtn" title="Mute (M)">🔊</button>
+  <span class="btn" id="partyChip" style="display:none;cursor:default;background:var(--plum);color:var(--cream)"></span>
+</div>
+<div id="emoteBar" class="run-only"></div>
+<button class="btn hot run-only" id="dashBtn">DASH</button>
+
+<!-- HOME -->
+<div class="over show" id="home"><div class="panel" id="homeCard">
+  <div id="homeLeft">
+    <h1 class="logo">BOO<br>GOBBLE</h1>
+    <canvas id="preview" width="440" height="440"></canvas>
+    <input id="nameIn" maxlength="14" placeholder="Your ghost name" aria-label="Ghost name">
+    <div class="chips">
+      <div class="chip"><b id="hBest">0</b><span>Best</span></div>
+      <div class="chip"><b id="hStreak">1</b><span>Day streak</span></div>
+      <div class="chip"><b id="hRuns">0</b><span>Runs</span></div>
+    </div>
+    <button class="btn hot" id="playBtn">PLAY SOLO ▶</button>
+    <button class="btn plum" id="partyBtn" style="width:100%;font-size:19px;padding:10px">👥 PLAY WITH FRIENDS</button>
+    <button class="btn" id="howBtn" style="width:100%">❓ HOW TO PLAY</button>
+  </div>
+  <div>
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-tab="upgrades">⚡ Upgrades</button>
+      <button class="tab" data-tab="colors">🎨 Colors</button>
+      <button class="tab" data-tab="hats">🎩 Looks</button>
+      <button class="tab" data-tab="emotes">😜 Emotes</button>
+      <div class="wallet">🍬 <span id="wallet">0</span></div>
+    </div>
+    <div class="grid" id="shop"></div>
+    <div class="keys" id="shopHint"></div>
+  </div>
+</div></div>
+
+<!-- PAUSE -->
+<div class="over dim" id="pause"><div class="panel" style="width:min(380px,100%);text-align:center">
+  <h2>PAUSED</h2>
+  <div class="sub">Mass <b id="pMass">0</b> · 🍬 <b id="pEarn">0</b> earned so far</div>
+  <div class="actions" style="flex-direction:column">
+    <button class="btn hot" id="resumeBtn">▶ RESUME</button>
+    <button class="btn" id="quitBtn">🏠 QUIT TO HOME</button>
+  </div>
+  <div class="keys" id="quitNote">Quitting banks the candy you've earned.</div><div class="keys">Press Esc or P to resume.</div>
+</div></div>
+
+<!-- RESULTS -->
+<div class="over dim" id="results"><div class="panel" style="width:min(480px,100%)">
+  <h2 id="rTitle">GOBBLED!</h2>
+  <div class="sub" id="rSub"></div>
+  <div class="scores">
+    <div><b id="rPeak">0</b><span>Peak mass</span></div>
+    <div><b id="rEat">0</b><span>Ghosts eaten</span></div>
+    <div><b id="rBest">0</b><span>Best ever</span></div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="homeBtn">🏠 HOME &amp; SHOP</button>
+    <button class="btn hot" id="againBtn">PLAY AGAIN ▶</button>
+  </div>
+</div></div>
+
+<!-- HOW TO PLAY -->
+<div class="over dim" id="howOver"><div class="panel" style="width:min(820px,100%)">
+  <h2>HOW TO PLAY</h2>
+  <div class="sub">You're a hungry little ghost. Eat candy and smaller ghosts, grow huge, and don't get gobbled.</div>
+  <div class="how">
+    <section><h3>🕹 Controls</h3>
+      <p><span class="k">Mouse</span> Your ghost floats toward the pointer. The farther the pointer, the faster you go.</p>
+      <p><span class="k">WASD</span> or <span class="k">Arrows</span> Steer with the keyboard instead.</p>
+      <p><span class="k">Drag</span> On touch screens, drag anywhere like a joystick and tap <b>DASH</b>.</p>
+      <p><span class="k">Space</span> / <span class="k">Right-click</span> Dash · <span class="k">1–7</span> Emotes · <span class="k">Esc</span> / <span class="k">P</span> Pause · <span class="k">M</span> Mute</p>
+    </section>
+    <section><h3>🍴 Eat or run</h3>
+      <p>Every ghost wears a tag with its mass. <b class="tg">🍴 EAT</b> means you can gobble it (dashed green ring). <b class="tr">☠ RUN</b> means it can gobble you (pulsing red ring). <b class="te">≈ EVEN</b> means you're too close in size for either to eat the other.</p>
+      <p>You need to be noticeably bigger (about 12% wider) to eat someone. Your stats box shows the exact limits, like "Eat under 34 · Run from 58+".</p>
+    </section>
+    <section><h3>⚡ Dash</h3>
+      <p>A short burst of speed to catch prey or escape. It costs 8% of your mass, which drops behind you as candy, and needs a moment to recharge. You need at least 18 mass to dash.</p>
+      <p>Big ghosts are slower and shrink slowly over time, so small ghosts can always get away.</p>
+    </section>
+    <section><h3>🍬 Earning candy</h3>
+      <p>When a run ends you earn <b>peak mass ÷ 3</b>, plus <b>5 per ghost eaten</b>. Then two bonuses multiply that:</p>
+      <p><b>⏱ Time:</b> x1.5 at 2:00, x2 at 4:00, x2.5 at 6:00, x3 at 8:00+.<br><b>🏆 Rank:</b> best leaderboard spot #1 x1.5 · #2–3 x1.3 · #4–5 x1.15.</p>
+      <p>Paused time doesn't count. Quitting from the pause menu still pays what you've earned.</p>
+    </section>
+    <section><h3>🛍 Shop</h3>
+      <p><b>Upgrades</b> (5 levels each): Zoom (speed), Magnet (pulls candy in), Big Start (start bigger), Quick Dash (faster recharge).</p>
+      <p><b>Colors</b>, <b>Looks</b> (hats and more) and <b>Emotes</b> change how you look. Hover over any item to preview it before buying.</p>
+      <p>Come back every day for a streak bonus: 30 candy × your streak day, up to day 7.</p>
+    </section>
+    <section><h3>😄 Faces &amp; emotes</h3>
+      <p>Your ghost's face reacts on its own: <b>scared</b> near danger, <b>angry</b> when chasing prey, <b>happy</b> after a gobble, mouth wide open while dashing.</p>
+      <p>Press <span class="k">1–7</span> or tap the emote bar to show an emote yourself. Nearby ghosts may answer back.</p>
+    </section>
+    <section class="wide"><h3>👥 Play with friends</h3>
+      <p><b>Host:</b> tap <b>Play with friends → Create party</b>. You get a 4-letter code and an invite link. Pick the arena size (12, 20 or 28 ghosts) and press <b>Start</b> when you're ready.</p>
+      <p><b>Friends:</b> tap <b>Play with friends</b>, type the code and press <b>Join</b>, or just open the invite link. Up to 8 players per party, and friends can jump in even after the match has started.</p>
+      <p><b>Bots fill the empty seats</b>, and one steps aside each time a friend joins. Friends have teal names and a 👥 on the leaderboard. If you get eaten, press <b>Respawn</b> to jump back in. Party matches keep running while you're paused, and the party ends if the host leaves.</p>
+    </section>
+  </div>
+  <div class="actions"><button class="btn hot" id="closeHow">GOT IT!</button></div>
+</div></div>
+
+<!-- PARTY -->
+<div class="over dim" id="partyOver"><div class="panel" style="width:min(620px,100%)">
+  <div id="partyChoose">
+    <h2>PLAY WITH FRIENDS</h2>
+    <div class="sub" id="partyNote"></div>
+    <div class="pgrid">
+      <div class="pbox"><h3>Host a party</h3><p>Get a code to share with friends. Bots fill the empty seats.</p>
+        <button class="btn hot" id="createBtn" style="width:100%">✨ CREATE PARTY</button></div>
+      <div class="pbox"><h3>Join a party</h3><p>Type the 4-letter code a friend sent you.</p>
+        <input id="joinCode" maxlength="8" placeholder="K7QF" aria-label="Party code" autocomplete="off">
+        <button class="btn plum" id="joinBtn" style="width:100%">JOIN ▶</button></div>
+    </div>
+    <div class="pmsg" id="partyMsg"></div>
+    <label class="keys" id="testWrap" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+      <input type="checkbox" id="testMode"> Test mode: connect tabs in this browser only (no internet needed)
+    </label>
+    <div class="actions"><button class="btn" id="partyBack">← BACK</button></div>
+  </div>
+  <div id="partyLobby" style="display:none">
+    <div class="pmode" id="pMode"></div>
+    <div class="codebox"><span>PARTY CODE</span><b id="pCode">----</b><button class="btn" id="pCopy">🔗 Copy invite link</button></div>
+    <h3>Players</h3>
+    <div class="members" id="pMembers"></div>
+    <h3>Arena size</h3>
+    <div class="tabs" id="pSlots"></div>
+    <div class="keys" id="pBots"></div>
+    <div class="actions">
+      <button class="btn" id="pLeave">🚪 LEAVE</button>
+      <button class="btn hot" id="pStart">▶ START GAME</button>
+      <div class="pwait" id="pWait">Waiting for the host to start…</div>
+    </div>
+  </div>
+</div></div>
+
+<!-- Photon Realtime JavaScript SDK: drop Photon-Javascript_SDK.min.js next to this file to enable online parties -->
+<script src="Photon-Javascript_SDK.min.js"></script>
+<script src="data.js"></script>
+<script src="draw.js"></script>
+<script src="net.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+<script src="party.js"></script>
+</body>
+</html>
